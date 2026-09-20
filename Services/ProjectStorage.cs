@@ -85,6 +85,7 @@ namespace workspace_hub.Services
                 foreach (var p in list)
                 {
                     if (p.FolderPaths == null) p.FolderPaths = new ObservableCollection<string>();
+                    if (p.MediaPaths == null) p.MediaPaths = new ObservableCollection<string>();
                 }
 
                 return new ObservableCollection<Project>(list);

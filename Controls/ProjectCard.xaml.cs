@@ -202,6 +202,54 @@ namespace workspace_hub.Controls
         // Notify parent when project data changed (folders, primary folder, etc.)
         public event EventHandler<Project>? ProjectChanged;
 
+        // Open media (file path or http/https url)
+        private void OpenMedia_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button btn)
+            {
+                var target = btn.Tag as string ?? btn.DataContext as string;
+                if (string.IsNullOrWhiteSpace(target))
+                {
+                    System.Windows.MessageBox.Show("Media path is empty.", "Open Media", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                // If it's an HTTP/HTTPS URL, open in default browser
+                if (target.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || target.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo { FileName = target, UseShellExecute = true });
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Windows.MessageBox.Show($"Failed to open URL:\n{ex.Message}", "Open Media", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                    return;
+                }
+
+                // Otherwise treat as local file
+                try
+                {
+                    if (!System.IO.File.Exists(target))
+                    {
+                        System.Windows.MessageBox.Show($"File not found:\n{target}", "Open Media", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    Process.Start(new ProcessStartInfo { FileName = target, UseShellExecute = true });
+                }
+                catch (System.ComponentModel.Win32Exception wex)
+                {
+                    System.Windows.MessageBox.Show($"Failed to open media. The system could not start the associated program.\n{wex.Message}", "Open Media", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.MessageBox.Show($"Failed to open media:\n{ex.Message}", "Open Media", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
         // Track notified states in-memory for this session to avoid duplicate notifications
         private static readonly System.Collections.Generic.HashSet<string> _notified = new System.Collections.Generic.HashSet<string>();
 

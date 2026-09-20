@@ -114,6 +114,9 @@ namespace workspace_hub.Models
         // Use ObservableCollection so the UI can observe additions automatically.
         public ObservableCollection<string> FolderPaths { get; set; } = new ObservableCollection<string>();
 
+        // Media paths or URLs (images, videos, links). Support local file paths and http/https URLs.
+        public ObservableCollection<string> MediaPaths { get; set; } = new ObservableCollection<string>();
+
         // Convenience property for compatibility
         // PrimaryFolderAlready provided above
     }
