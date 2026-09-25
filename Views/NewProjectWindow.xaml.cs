@@ -2,8 +2,9 @@ using System;
 using System.Linq;
 using System.Windows;
 using workspace_hub.Models;
+using workspace_hub.Services;
 
-namespace workspace_hub
+namespace workspace_hub.Views
 {
     /// <summary>
     /// Interaction logic for NewProjectWindow.xaml
@@ -29,6 +30,8 @@ namespace workspace_hub
             }
         }
 
+        private void ClearFolder_Click(object sender, RoutedEventArgs e) => FolderPathTextBox.Clear();
+
         private void CreateButton_Click(object sender, RoutedEventArgs e)
         {
 
@@ -41,13 +44,15 @@ namespace workspace_hub
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(folder))
+            if (!ProjectLinksEditor.CommitPending()) return;
+
+            if (!ProjectLinks.HasLocation(new[] { folder ?? "" }, ProjectLinksEditor.Links))
             {
-                System.Windows.MessageBox.Show("Please select a folder.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                System.Windows.MessageBox.Show("Please select a folder or add a valid HTTP/HTTPS URL.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            if (!System.IO.Directory.Exists(folder))
+            if (!string.IsNullOrWhiteSpace(folder) && !System.IO.Directory.Exists(folder))
             {
                 var res = System.Windows.MessageBox.Show($"The selected folder does not exist:\n{folder}\n\nDo you want to continue and add the project without creating the folder?", "Folder not found", MessageBoxButton.YesNo, MessageBoxImage.Warning);
                 if (res != System.Windows.MessageBoxResult.Yes)
@@ -67,9 +72,12 @@ namespace workspace_hub
                 Deadline = DeadlinePicker.SelectedDate
             };
 
-            project.FolderPaths.Add(folder);
-            // Set the first folder as primary by default
-            project.PrimaryFolderPath = folder;
+            if (!string.IsNullOrWhiteSpace(folder))
+            {
+                project.FolderPaths.Add(folder);
+                project.PrimaryFolderPath = folder;
+            }
+            ProjectLinks.UpdateUrls(project, ProjectLinksEditor.Links);
 
             CreatedProject = project;
             DialogResult = true;

@@ -1,0 +1,31 @@
+<UserControl x:Class="workspace_hub.Controls.LinksEditor"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel>
+        <TextBlock Text="Liên kết" Margin="0,8,0,4" />
+        <TextBlock Text="Nhập URL bắt đầu bằng http:// hoặc https://" TextWrapping="Wrap" Margin="0,0,0,4" />
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="UrlTextBox" KeyDown="UrlTextBox_KeyDown" />
+            <Button Grid.Column="1" Content="Thêm" Click="Add_Click" Margin="8,0,0,0" Padding="8,2" />
+        </Grid>
+        <TextBlock x:Name="ErrorText" Foreground="Firebrick" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,4,0,0" />
+        <ItemsControl x:Name="LinksList" Margin="0,6,0,0">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="0,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding}" ToolTip="{Binding}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Content="Xóa" Tag="{Binding}" Click="Remove_Click" Margin="8,0,0,0" Padding="8,2" />
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

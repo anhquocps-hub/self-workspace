@@ -1,65 +1,44 @@
-﻿using System;
+using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
-using System.Windows.Data;
+using workspace_hub.ViewModels;
 using workspace_hub.Models;
 using workspace_hub.Services;
 
-namespace workspace_hub
+
+namespace workspace_hub.Views
 {
     public partial class MainWindow : Window
     {
-        public ObservableCollection<Project> Projects { get; } = new ObservableCollection<Project>();
-        public ICollectionView ProjectsView { get; private set; }
+        private MainViewModel? _viewModel;
+        public ObservableCollection<Project> Projects => _viewModel!.Projects;
+        public ICollectionView ProjectsView => _viewModel!.ProjectsView;
 
         public MainWindow()
         {
             InitializeComponent();
 
-            // Load persisted projects (if any)
-            var loaded = ProjectStorage.Load();
-            Projects.Clear();
-            foreach (var p in loaded)
-            {
-                Projects.Add(p);
-            }
-
-            // Initialize view over Projects
-            ProjectsView = CollectionViewSource.GetDefaultView(Projects);
-            ProjectsView.Filter = FilterProject;
-
-            // Set a MainViewModel as DataContext
-            var vm = new ViewModels.MainViewModel();
-            DataContext = vm;
-
-            // Subscribe to ViewModel requests for dialogs
-            vm.RequestNewProjectDialog = () =>
+            _viewModel = new MainViewModel();
+            DataContext = _viewModel;
+            _viewModel.RequestNewProjectDialog = () =>
             {
                 var dlg = new NewProjectWindow { Owner = this };
-                var result = dlg.ShowDialog();
-                if (result == true && dlg.CreatedProject != null)
+                if (dlg.ShowDialog() == true && dlg.CreatedProject != null)
                 {
-                    vm.Projects.Add(dlg.CreatedProject);
-                    vm.SaveProjects();
-                    // refresh view state via existing methods
-                    ProjectsView = vm.ProjectsView;
+                    Projects.Add(dlg.CreatedProject);
+                    _viewModel.SaveProjects();
                     RefreshViewState();
                 }
             };
 
-            // Wire ProjectsView for existing UI bindings
-            ProjectsView = vm.ProjectsView;
-
-            // initial empty-state update
+            // Keep the empty state synchronized when search or status filters change.
+            ProjectsView.CollectionChanged += (_, _) => UpdateViewState();
             RefreshViewState();
-
-            // After loading projects, check deadlines and send initial notifications
             CheckDeadlinesAndNotify();
         }
-
         // Simple in-memory set to avoid repeating notifications during this session
         private readonly System.Collections.Generic.HashSet<string> _notifiedThisSession = new System.Collections.Generic.HashSet<string>();
 
@@ -113,7 +92,7 @@ namespace workspace_hub
                 }
                 else if (state == DeadlineState.Overdue)
                 {
-                    var days = (DateTime.Now.Date - project.Deadline.Value.Date).Days;
+                    var days = (DateTime.Now.Date - project.Deadline.GetValueOrDefault().Date).Days;
                     text = $"\"{project.Name}\" is overdue by {days} day{(days == 1 ? "" : "s")}.";
                 }
 
@@ -145,47 +124,12 @@ namespace workspace_hub
 
         private void StatusFilterButton_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is System.Windows.Controls.Button btn)
-            {
-                var txt = btn.Content?.ToString() ?? "All";
-                // Content is like "Todo (3)" - extract prefix before space
-                var parts = txt.Split(' ');
-                var key = parts[0];
-                // Map 'In' from 'In Progress' case
-                if (txt.StartsWith("In Progress", StringComparison.OrdinalIgnoreCase))
-                    key = "In Progress";
-
-                // Find matching ComboBoxItem and select it
-                foreach (var item in StatusComboBox.Items)
-                {
-                    if (item is System.Windows.Controls.ComboBoxItem cbi)
-                    {
-                        var content = cbi.Content?.ToString();
-                        if (string.Equals(content, key, StringComparison.OrdinalIgnoreCase))
-                        {
-                            StatusComboBox.SelectedItem = cbi;
-                            break;
-                        }
-                    }
-                }
-            }
+            if (_viewModel == null) return;
+            _viewModel.SelectedStatus = sender == TodoFilterButton ? "Todo"
+                : sender == InProgressFilterButton ? "In Progress"
+                : sender == DoneFilterButton ? "Done" : "All";
+            RefreshViewState();
         }
-
-        private void NewProjectButton_Click(object sender, RoutedEventArgs e)
-        {
-            // Keep compatibility for views that still call the old handler (should be replaced by command)
-            var dlg = new NewProjectWindow { Owner = this };
-            var result = dlg.ShowDialog();
-            if (result == true && dlg.CreatedProject != null)
-            {
-                Projects.Add(dlg.CreatedProject);
-                // Persist after create
-                ProjectStorage.Save(Projects);
-                ProjectsView.Refresh();
-                RefreshViewState();
-            }
-        }
-
         private void ProjectCard_EditRequested(object? sender, Project project)
         {
             if (project == null) return;
@@ -196,7 +140,7 @@ namespace workspace_hub
             if (result == true)
             {
                 // Project properties were updated directly via binding/code-behind
-                ProjectStorage.Save(Projects);
+                _viewModel!.SaveProjects();
                 ProjectsView.Refresh();
                 RefreshViewState();
             }
@@ -210,18 +154,8 @@ namespace workspace_hub
             var res = System.Windows.MessageBox.Show(msg, "Delete Project", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (res == System.Windows.MessageBoxResult.Yes)
             {
-                // Delegate delete to ViewModel collection if available
-                if (DataContext is ViewModels.MainViewModel vm)
-                {
-                    vm.Projects.Remove(project);
-                    vm.SaveProjects();
-                    ProjectsView = vm.ProjectsView;
-                }
-                else
-                {
-                    Projects.Remove(project);
-                    ProjectStorage.Save(Projects);
-                }
+                Projects.Remove(project);
+                _viewModel!.SaveProjects();
                 ProjectsView.Refresh();
                 RefreshViewState();
             }
@@ -234,7 +168,7 @@ namespace workspace_hub
             try
             {
                 // Persist when Project content (folders, primary) changes
-                ProjectStorage.Save(Projects);
+                _viewModel!.SaveProjects();
             }
             catch (Exception ex)
             {
@@ -275,58 +209,9 @@ namespace workspace_hub
             if (DoneFilterButton != null) DoneFilterButton.Content = $"Done ({done})";
         }
 
-        private bool FilterProject(object obj)
-        {
-            if (obj is not Project project) return false;
-            // Delegate to ViewModel's filter if available
-            if (DataContext is ViewModels.MainViewModel vm)
-            {
-                // Use vm.SearchText
-                var search = vm.SearchText?.Trim();
-                if (!string.IsNullOrWhiteSpace(search))
-                {
-                    if (project.Name == null || !project.Name.Contains(search, StringComparison.OrdinalIgnoreCase))
-                        return false;
-                }
-
-                // Status filter via StatusComboBox (hidden) still used in view; keep compatibility
-                var statusItem = StatusComboBox?.SelectedItem as System.Windows.Controls.ComboBoxItem;
-                var status = statusItem?.Content?.ToString();
-                if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (!string.Equals(project.Status ?? string.Empty, status, StringComparison.OrdinalIgnoreCase))
-                        return false;
-                }
-            }
-            else
-            {
-                // Fallback to old behavior: SearchTextBox
-                var search = SearchTextBox?.Text?.Trim();
-                if (!string.IsNullOrWhiteSpace(search))
-                {
-                    if (project.Name == null || !project.Name.Contains(search, StringComparison.OrdinalIgnoreCase))
-                        return false;
-                }
-            }
-
-            return true;
-        }
-
-        private void SearchTextBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
-        {
-            ProjectsView.Refresh();
-            RefreshViewState();
-        }
-
-        private void StatusComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {
-            ProjectsView.Refresh();
-            RefreshViewState();
-        }
-
         private void SortComboBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            if (ProjectsView == null) return;
+            if (_viewModel == null) return;
 
             ProjectsView.SortDescriptions.Clear();
             var item = SortComboBox?.SelectedItem as System.Windows.Controls.ComboBoxItem;
@@ -353,10 +238,16 @@ namespace workspace_hub
 
         private void RefreshViewState()
         {
-            if (ProjectsView == null) return;
+            if (_viewModel == null) return;
             // Ensure view is refreshed
             ProjectsView.Refresh();
 
+            UpdateViewState();
+        }
+
+        private void UpdateViewState()
+        {
+            if (_viewModel == null) return;
             // Update empty state text
             if (EmptyStateTextBlock != null)
             {
@@ -392,11 +283,22 @@ namespace workspace_hub
 
             if (string.IsNullOrWhiteSpace(folder))
             {
-                var displayName = project?.Name ?? "(unknown)";
-                System.Windows.MessageBox.Show($"No primary folder is set for project '{displayName}'.", "Open Project", MessageBoxButton.OK, MessageBoxImage.Warning);
+                var url = ProjectLinks.FirstUrl(project);
+                if (url == null)
+                {
+                    System.Windows.MessageBox.Show("Please add a folder or a valid HTTP/HTTPS URL.", "Open Project", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                try
+                {
+                    Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    System.Windows.MessageBox.Show($"Failed to open URL:\n{ex.Message}", "Open Project", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
                 return;
             }
-
             if (!Directory.Exists(folder))
             {
                 System.Windows.MessageBox.Show($"Folder not found:\n{folder}", "Folder not found", MessageBoxButton.OK, MessageBoxImage.Warning);

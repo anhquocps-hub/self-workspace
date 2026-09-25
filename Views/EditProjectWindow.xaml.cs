@@ -1,8 +1,9 @@
 using System;
 using System.Windows;
 using workspace_hub.Models;
+using workspace_hub.Services;
 
-namespace workspace_hub
+namespace workspace_hub.Views
 {
     /// <summary>
     /// Interaction logic for EditProjectWindow.xaml
@@ -20,6 +21,9 @@ namespace workspace_hub
             NameTextBox.Text = _project.Name;
             NoteTextBox.Text = _project.Note;
             DeadlinePicker.SelectedDate = _project.Deadline;
+
+            foreach (var url in _project.MediaPaths.Where(ProjectLinks.IsWebUrl))
+                if (!ProjectLinksEditor.Links.Contains(url.Trim())) ProjectLinksEditor.Links.Add(url.Trim());
 
             // Select status in ComboBox
             for (int i = 0; i < StatusComboBox.Items.Count; i++)
@@ -42,6 +46,13 @@ namespace workspace_hub
                 return;
             }
 
+            if (!ProjectLinksEditor.CommitPending()) return;
+            if (!ProjectLinks.HasLocation(_project.FolderPaths, ProjectLinksEditor.Links))
+            {
+                System.Windows.MessageBox.Show("Please keep a folder or add a valid HTTP/HTTPS URL.", "Validation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
             var statusItem = StatusComboBox.SelectedItem as System.Windows.Controls.ComboBoxItem;
             var status = statusItem?.Content?.ToString() ?? "Todo";
 
@@ -50,6 +61,8 @@ namespace workspace_hub
             _project.Note = NoteTextBox.Text ?? string.Empty;
             _project.Status = status;
             _project.Deadline = DeadlinePicker.SelectedDate;
+
+            ProjectLinks.UpdateUrls(_project, ProjectLinksEditor.Links);
 
             DialogResult = true;
             Close();
