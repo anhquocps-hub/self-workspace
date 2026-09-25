@@ -1,9 +1,8 @@
 using System;
 using System.Windows.Input;
 
-namespace workspace_hub.ViewModels
+namespace workspace_hub.Commands
 {
-    // Keep RelayCommand in ViewModels namespace to avoid adding a new top-level Commands namespace
     public class RelayCommand : ICommand
     {
         private readonly Action<object?> _execute;

@@ -3,7 +3,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Windows.Data;
-using workspace_hub.ViewModels;
+using workspace_hub.Commands;
 using workspace_hub.Models;
 using workspace_hub.Services;
 
@@ -26,6 +26,12 @@ namespace workspace_hub.ViewModels
             set { if (SetProperty(ref _searchText, value)) ProjectsView.Refresh(); }
         }
 
+        private string _selectedStatus = "All";
+        public string SelectedStatus
+        {
+            get => _selectedStatus;
+            set { if (SetProperty(ref _selectedStatus, value)) ProjectsView.Refresh(); }
+        }
         public MainViewModel()
         {
             // Load projects from storage
@@ -50,7 +56,8 @@ namespace workspace_hub.ViewModels
                     return false;
             }
 
-            return true;
+            return string.Equals(SelectedStatus, "All", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(project.Status, SelectedStatus, StringComparison.OrdinalIgnoreCase);
         }
 
         public RelayCommand NewProjectCommand { get; }
