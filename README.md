@@ -48,5 +48,27 @@ Dự án cần tên và ít nhất một folder hoặc URL hợp lệ. Khi tạo
 URL, để folder trống; nút Clear bỏ folder đã chọn. Khi sửa, Cancel giữ
 nguyên dữ liệu. Các tệp media cũ vẫn được bảo toàn.
 
-Open Workspace mở folder chính nếu có; nếu không có folder, mở URL đầu
-tiên bằng trình duyệt mặc định. Nút Open cạnh mỗi link mở riêng link đó.
+**Open Workspace** và **Open Project** mở toàn bộ folder trước, rồi mở các link
+và file media theo thứ tự đang lưu. Folder mở bằng File Explorer, URL mở bằng
+trình duyệt mặc định, file media mở bằng ứng dụng mặc định của Windows.
+Mục trống được bỏ qua, mục trùng chỉ mở một lần. Nếu một mục không mở được,
+ứng dụng tiếp tục mở các mục còn lại và hiển thị thông báo lỗi tổng hợp.
+Nút Open cạnh mỗi link vẫn mở riêng link đó.
+
+Nếu có hơn **5 link**, hơn **3 folder** hoặc hơn **2 file media**, ứng dụng hỏi
+xác nhận trước khi mở bất kỳ mục nào, kèm số lượng từng loại. Chọn **Yes** để
+mở tất cả hoặc **No** (mặc định) để hủy. Đúng ngưỡng vẫn mở ngay. Số lượng
+không tính mục trống/trùng, nhưng vẫn tính đường dẫn chưa tồn tại.
+Không giới hạn số tài nguyên được lưu trong dự án.
+
+
+## Card tóm tắt và chi tiết dự án
+
+Card hiển thị tên, trạng thái, ghi chú ngắn, deadline và số lượng tài nguyên.
+Nhấn vùng thông tin hoặc nút **Details** để mở cửa sổ chi tiết có thể thay đổi
+kích thước. Nút **Open Project** trên card mở toàn bộ folder, link và file media.
+
+Cửa sổ chi tiết hiển thị toàn bộ ghi chú, liên kết/media và folder. Tại đây
+có thể đổi trạng thái, thêm folder, chọn folder chính, sửa hoặc xóa dự án.
+Các thay đổi được lưu ngay; **Close** không hoàn tác. Hộp thoại **Edit** vẫn
+cho phép Cancel để bỏ các chỉnh sửa chưa lưu. Xóa dự án cần xác nhận.
