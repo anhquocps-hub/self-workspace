@@ -163,6 +163,7 @@
 
 							<controls:ProjectCard
                                 Project="{Binding}"
+                                DetailsRequested="ProjectCard_DetailsRequested"
                                 OpenRequested="ProjectCard_OpenRequested"
                                 EditRequested="ProjectCard_EditRequested"
                                 DeleteRequested="ProjectCard_DeleteRequested"

@@ -130,12 +130,34 @@ namespace workspace_hub.Views
                 : sender == DoneFilterButton ? "Done" : "All";
             RefreshViewState();
         }
+        private void ProjectCard_DetailsRequested(object? sender, Project project)
+        {
+            var popup = new ProjectDetailsWindow(project) { Owner = this };
+            popup.DetailsContent.OpenRequested += ProjectCard_OpenRequested;
+            popup.DetailsContent.EditRequested += ProjectCard_EditRequested;
+            popup.DetailsContent.DeleteRequested += ProjectCard_DeleteRequested;
+            popup.DetailsContent.ProjectChanged += ProjectCard_ProjectChanged;
+            try
+            {
+                popup.ShowDialog();
+            }
+            finally
+            {
+                popup.DetailsContent.OpenRequested -= ProjectCard_OpenRequested;
+                popup.DetailsContent.EditRequested -= ProjectCard_EditRequested;
+                popup.DetailsContent.DeleteRequested -= ProjectCard_DeleteRequested;
+                popup.DetailsContent.ProjectChanged -= ProjectCard_ProjectChanged;
+            }
+        }
+
+        private Window ActionOwner(object? sender) =>
+            sender is DependencyObject element ? Window.GetWindow(element) ?? this : this;
         private void ProjectCard_EditRequested(object? sender, Project project)
         {
             if (project == null) return;
 
             // View handles edit dialog, then notify ViewModel to persist
-            var dlg = new EditProjectWindow(project) { Owner = this };
+            var dlg = new EditProjectWindow(project) { Owner = ActionOwner(sender) };
             var result = dlg.ShowDialog();
             if (result == true)
             {
@@ -151,13 +173,14 @@ namespace workspace_hub.Views
             if (project == null) return;
 
             var msg = $"Are you sure you want to delete \"{project.Name}\"?\n\nThis will remove the project from Workspace Hub but will NOT delete files on disk.";
-            var res = System.Windows.MessageBox.Show(msg, "Delete Project", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            var res = System.Windows.MessageBox.Show(ActionOwner(sender), msg, "Delete Project", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (res == System.Windows.MessageBoxResult.Yes)
             {
-                Projects.Remove(project);
+                if (!Projects.Remove(project)) return;
                 _viewModel!.SaveProjects();
                 ProjectsView.Refresh();
                 RefreshViewState();
+                if (ActionOwner(sender) is ProjectDetailsWindow popup) popup.Close();
             }
         }
 
@@ -271,7 +294,7 @@ namespace workspace_hub.Views
             UpdateStatusCounts();
         }
 
-        private void ProjectCard_OpenRequested(object sender, Project project)
+        private void ProjectCard_OpenRequested(object? sender, Project project)
         {
             if (project == null)
             {
@@ -279,44 +302,76 @@ namespace workspace_hub.Views
                 return;
             }
 
-            var folder = project.PrimaryFolder;
+            var errors = new System.Collections.Generic.List<string>();
+            var seenPaths = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenUrls = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+            var resources = new System.Collections.Generic.List<(string Target, bool IsFolder, bool IsUrl)>();
 
-            if (string.IsNullOrWhiteSpace(folder))
+            void AddResource(string? value, bool isFolder)
             {
-                var url = ProjectLinks.FirstUrl(project);
-                if (url == null)
+                if (string.IsNullOrWhiteSpace(value)) return;
+                var target = value.Trim();
+                var isUrl = !isFolder && ProjectLinks.IsWebUrl(target);
+                var key = target;
+                if (!isUrl)
                 {
-                    System.Windows.MessageBox.Show("Please add a folder or a valid HTTP/HTTPS URL.", "Open Project", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    return;
+                    try
+                    {
+                        key = Path.TrimEndingDirectorySeparator(Path.GetFullPath(target));
+                    }
+                    catch (Exception)
+                    {
+                        // Keep invalid paths in the count and report their errors when opening.
+                    }
                 }
+                if (!(isUrl ? seenUrls : seenPaths).Add(key)) return;
+                resources.Add((target, isFolder, isUrl));
+            }
+
+            foreach (var folder in project.FolderPaths) AddResource(folder, isFolder: true);
+            foreach (var media in project.MediaPaths) AddResource(media, isFolder: false);
+
+            if (resources.Count == 0)
+            {
+                System.Windows.MessageBox.Show("Please add a folder, a valid HTTP/HTTPS URL, or a media file.", "Open Project", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var folderCount = resources.Count(resource => resource.IsFolder);
+            var linkCount = resources.Count(resource => resource.IsUrl);
+            var fileCount = resources.Count - folderCount - linkCount;
+            if (linkCount > 5 || folderCount > 3 || fileCount > 2)
+            {
+                var result = System.Windows.MessageBox.Show(
+                    $"You are about to open {linkCount} links, {folderCount} folders, and {fileCount} media files.\n\nOpening many resources may slow down your computer. Continue?",
+                    "Open Project", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+                if (result != MessageBoxResult.Yes) return;
+            }
+
+            foreach (var (target, isFolder, isUrl) in resources)
+            {
                 try
                 {
-                    Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
+                    if (!isUrl)
+                    {
+                        if (isFolder ? !Directory.Exists(target) : !File.Exists(target))
+                        {
+                            errors.Add($"{(isFolder ? "Folder" : "File")} not found: {target}");
+                            continue;
+                        }
+                    }
+
+                    Process.Start(new ProcessStartInfo { FileName = target, UseShellExecute = true });
                 }
                 catch (Exception ex)
                 {
-                    System.Windows.MessageBox.Show($"Failed to open URL:\n{ex.Message}", "Open Project", MessageBoxButton.OK, MessageBoxImage.Error);
+                    errors.Add($"Failed to open {target}: {ex.Message}");
                 }
-                return;
-            }
-            if (!Directory.Exists(folder))
-            {
-                System.Windows.MessageBox.Show($"Folder not found:\n{folder}", "Folder not found", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
             }
 
-            try
+            if (errors.Count > 0)
             {
-                // Use shell execute to open the folder in File Explorer
-                Process.Start(new ProcessStartInfo { FileName = folder, UseShellExecute = true });
-            }
-            catch (System.ComponentModel.Win32Exception wex)
-            {
-                System.Windows.MessageBox.Show($"Failed to open folder. The operating system could not start the specified program.\n{wex.Message}", "Open Folder", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            catch (Exception ex)
-            {
-                System.Windows.MessageBox.Show($"Failed to open folder:\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Windows.MessageBox.Show("Some resources could not be opened:\n\n" + string.Join("\n", errors), "Open Project", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
     }
